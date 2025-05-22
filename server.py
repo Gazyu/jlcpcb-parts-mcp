@@ -26,19 +26,19 @@ if not JLCPCB_DB_PATH:
 mcp = FastMCP('jlcpcb-parts')
 conn = sqlite3.connect(JLCPCB_DB_PATH)
 
-@mcp.tool()
+@mcp.tool
 def list_categories() -> str:
   """JLCPCBの部品のカテゴリ一覧を取得する"""
   result = conn.execute('SELECT id,category,subcategory FROM categories')
   return "|カテゴリID|カテゴリ名|サブカテゴリ名|\n|--|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|{r[2]}|' for r in result)
 
-@mcp.tool()
+@mcp.tool
 def list_manufacturers() -> str:
   """JLCPCBの部品のメーカー一覧を取得する"""
   result = conn.execute('SELECT id,name FROM manufacturers')
   return "|メーカーID|メーカー名|\n|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|' for r in result)
 
-@mcp.tool()
+@mcp.tool
 def get_category(category_id: int) -> str | None:
   """カテゴリIDから、カテゴリ名とサブカテゴリ名を取得する"""
   result = conn.execute('SELECT category,subcategory FROM categories WHERE id=?', [category_id]).fetchone()
@@ -47,7 +47,7 @@ def get_category(category_id: int) -> str | None:
   else:
     return None
 
-@mcp.tool()
+@mcp.tool
 def get_manufacturer(manufacturer_id: int) -> str | None:
   """メーカーIDから、メーカー名を取得する"""
   result = conn.execute('SELECT name FROM manufacturers WHERE id=?', [manufacturer_id]).fetchone()
@@ -56,7 +56,7 @@ def get_manufacturer(manufacturer_id: int) -> str | None:
   else:
     return None
 
-@mcp.tool()
+@mcp.tool
 def search_manufacturer(name: str) -> str | None:
   """メーカー名から部分一致で検索を行い、メーカーIDを取得する"""
   result = conn.execute('SELECT id,name FROM manufacturers WHERE name LIKE ?', [f'%{name}%'])
@@ -69,7 +69,7 @@ def search_manufacturer(name: str) -> str | None:
     return None
 
 '''
-@mcp.tool()
+@mcp.tool
 def search_subcategories(name: str) -> str | None:
   """サブカテゴリ名（英語表記）から検索を行い、カテゴリIDを取得する"""
   result = conn.execute('SELECT id,subcategory FROM categories WHERE subcategory LIKE ?', [f'%{name}%'])
@@ -82,7 +82,7 @@ def search_subcategories(name: str) -> str | None:
     return None
 '''
 
-@mcp.tool()
+@mcp.tool
 def get_datasheet_url(part_id: int) -> str | None:
   """JLCPCBの部品番号から、データシートのURLを取得する、数字の部分のみだけで良い"""
   result = conn.execute('SELECT datasheet FROM components WHERE lcsc=?', [part_id]).fetchone()
@@ -91,7 +91,7 @@ def get_datasheet_url(part_id: int) -> str | None:
   else:
     return None
 
-@mcp.tool()
+@mcp.tool
 def get_part_image(part_id: int) -> Image | None:
   """JLCPCBの部品番号から、部品の写真を取得する、数字の部分のみだけで良い"""
   try:
@@ -126,7 +126,7 @@ class SearchQuery(BaseModel):
     description='検索クエリを表現するモデル、各フィールドのAND検索'
   )
 
-@mcp.tool()
+@mcp.tool
 def search_parts(search_query: SearchQuery) -> str:
   """JLCPCBの部品を検索する"""
   query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components WHERE '
