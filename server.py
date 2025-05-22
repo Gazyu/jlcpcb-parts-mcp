@@ -13,7 +13,11 @@ import os
 import urllib.request
 import urllib.parse
 
-from fastmcp import FastMCP, Image
+import mcp.types as types
+from mcp.server.lowlevel import Server
+from mcp.server.stdio import stdio_server
+import anyio
+import base64
 from pydantic import BaseModel, Field, ConfigDict
 
 # SQLite database path, please change this!
@@ -23,50 +27,67 @@ if not JLCPCB_DB_PATH:
   print('Please set JLCPCB_DB_PATH environment value!', file=sys.stderr)
   sys.exit(1)
 
-mcp = FastMCP('jlcpcb-parts')
+app = Server('jlcpcb-parts')
 conn = sqlite3.connect(JLCPCB_DB_PATH)
 
-@mcp.tool()
-def list_categories() -> str:
+@app.list_tools()
+async def handle_list_tools() -> list[types.Tool]:
+    """利用可能なツール一覧を返します"""
+    return [
+        types.Tool(name="list_categories", description="JLCPCBの部品のカテゴリ一覧を取得する"),
+        types.Tool(name="list_manufacturers", description="JLCPCBの部品のメーカー一覧を取得する"),
+        types.Tool(name="get_category", description="カテゴリIDから、カテゴリ名とサブカテゴリ名を取得する"),
+        types.Tool(name="get_manufacturer", description="メーカーIDから、メーカー名を取得する"),
+        types.Tool(name="search_manufacturer", description="メーカー名から部分一致で検索を行い、メーカーIDを取得する"),
+        types.Tool(name="get_datasheet_url", description="JLCPCBの部品番号から、データシートのURLを取得する、数字の部分のみだけで良い"),
+        types.Tool(name="get_part_image", description="JLCPCBの部品番号から、部品の写真を取得する、数字の部分のみだけで良い"),
+        types.Tool(name="search_parts", description="JLCPCBの部品を検索する"),
+    ]
+
+@app.call_tool()
+async def list_categories(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品のカテゴリ一覧を取得する"""
   result = conn.execute('SELECT id,category,subcategory FROM categories')
-  return "|カテゴリID|カテゴリ名|サブカテゴリ名|\n|--|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|{r[2]}|' for r in result)
+  return [types.TextContent(type="text", text="|カテゴリID|カテゴリ名|サブカテゴリ名|\n|--|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|{r[2]}|' for r in result))]
 
-@mcp.tool()
-def list_manufacturers() -> str:
+@app.call_tool()
+async def list_manufacturers(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品のメーカー一覧を取得する"""
   result = conn.execute('SELECT id,name FROM manufacturers')
-  return "|メーカーID|メーカー名|\n|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|' for r in result)
+  return [types.TextContent(type="text", text="|メーカーID|メーカー名|\n|--|--|\n" + "\n".join(f'|{r[0]}|{r[1]}|' for r in result))]
 
-@mcp.tool()
-def get_category(category_id: int) -> str | None:
+@app.call_tool()
+async def get_category(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """カテゴリIDから、カテゴリ名とサブカテゴリ名を取得する"""
+  category_id = int(args.get('category_id', 0))
   result = conn.execute('SELECT category,subcategory FROM categories WHERE id=?', [category_id]).fetchone()
   if result:
-    return f'カテゴリ名：{result[0]}、サブカテゴリ名：{result[1]}'
+    return [types.TextContent(type="text", text=f'カテゴリ名：{result[0]}、サブカテゴリ名：{result[1]}')]
   else:
-    return None
+    return [types.TextContent(type="text", text="該当するカテゴリが見つかりませんでした")]
 
-@mcp.tool()
-def get_manufacturer(manufacturer_id: int) -> str | None:
+@app.call_tool()
+async def get_manufacturer(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """メーカーIDから、メーカー名を取得する"""
+  manufacturer_id = int(args.get('manufacturer_id', 0))
   result = conn.execute('SELECT name FROM manufacturers WHERE id=?', [manufacturer_id]).fetchone()
   if result:
-    return result[0]
+    return [types.TextContent(type="text", text=result[0])]
   else:
-    return None
+    return [types.TextContent(type="text", text="該当するメーカーが見つかりませんでした")]
 
-@mcp.tool()
-def search_manufacturer(name: str) -> str | None:
+@app.call_tool()
+async def search_manufacturer(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """メーカー名から部分一致で検索を行い、メーカーIDを取得する"""
-  result = conn.execute('SELECT id,name FROM manufacturers WHERE name LIKE ?', [f'%{name}%'])
+  search_name = args.get('name', '')
+  result = conn.execute('SELECT id,name FROM manufacturers WHERE name LIKE ?', [f'%{search_name}%'])
   lines = []
   for r in result:
     lines.append(f'|{r[0]}|{r[1]}|')
   if lines:
-    return "|メーカーID|メーカー名|\n" + "\n".join(lines)
+    return [types.TextContent(type="text", text="|メーカーID|メーカー名|\n|--|--|\n" + "\n".join(lines))]
   else:
-    return None
+    return [types.TextContent(type="text", text="該当するメーカーが見つかりませんでした")]
 
 '''
 @mcp.tool()
@@ -82,19 +103,21 @@ def search_subcategories(name: str) -> str | None:
     return None
 '''
 
-@mcp.tool()
-def get_datasheet_url(part_id: int) -> str | None:
+@app.call_tool()
+async def get_datasheet_url(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品番号から、データシートのURLを取得する、数字の部分のみだけで良い"""
+  part_id = int(args.get('part_id', 0))
   result = conn.execute('SELECT datasheet FROM components WHERE lcsc=?', [part_id]).fetchone()
   if result:
-    return result[0]
+    return [types.TextContent(type="text", text=result[0])]
   else:
-    return None
+    return [types.TextContent(type="text", text="該当する部品が見つかりませんでした")]
 
-@mcp.tool()
-def get_part_image(part_id: int) -> Image | None:
+@app.call_tool()
+async def get_part_image(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品番号から、部品の写真を取得する、数字の部分のみだけで良い"""
   try:
+    part_id = int(args.get('part_id', 0))
     result = conn.execute('SELECT extra FROM components WHERE lcsc=?', [part_id]).fetchone()
     if result:
       # 中くらいの画質の1枚目の写真を提示する
@@ -105,12 +128,14 @@ def get_part_image(part_id: int) -> Image | None:
       if ext == 'jpg':
         ext = 'jpeg'
 
-      return Image(data=urllib.request.urlopen(url).read(), format=ext)
+      image_data = urllib.request.urlopen(url).read()
+      b64_data = base64.b64encode(image_data).decode('utf-8')
+      return [types.ImageContent(type="image", data=b64_data, mimeType=f"image/{ext}")]
     else:
-      return None
+      return [types.TextContent(type="text", text="該当する部品が見つかりませんでした")]
   except Exception as e:
     print(e, file=sys.stderr)
-    return None
+    return [types.TextContent(type="text", text=f"エラーが発生しました: {str(e)}")]
 
 class SearchQuery(BaseModel):
   category_id: int = Field(ge=1, description='有効なカテゴリID、list_categoriesツールで取得する')
@@ -126,9 +151,10 @@ class SearchQuery(BaseModel):
     description='検索クエリを表現するモデル、各フィールドのAND検索'
   )
 
-@mcp.tool()
-def search_parts(search_query: SearchQuery) -> str:
+@app.call_tool()
+async def search_parts(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品を検索する"""
+  search_query = SearchQuery(**args)
   query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components WHERE '
   where_clauses = []
   params = []
@@ -193,7 +219,13 @@ def search_parts(search_query: SearchQuery) -> str:
 
     lines.append(f'|{r[0]}|{r[1]}|{r[2]}|{r[3]}|{r[4]}|{r[5]}|{r[6]}|{r[7]}|{r[8]}|{price_data}|{char_data}|')
 
-  return "|部品番号|カテゴリID|メーカーID|メーカー品番|Basic Partsか|Preferred Partsか|説明|パッケージ|在庫数|価格|特性|\n|--|--|--|--|--|--|--|--|--|--|--|\n" + "\n".join(lines)
+  return [types.TextContent(type="text", text="|部品番号|カテゴリID|メーカーID|メーカー品番|Basic Partsか|Preferred Partsか|説明|パッケージ|在庫数|価格|特性|\n|--|--|--|--|--|--|--|--|--|--|--|\n" + "\n".join(lines))]
 
 if __name__ == '__main__':
-  mcp.run(transport='stdio')
+  async def arun():
+    async with stdio_server() as streams:
+      await app.run(
+        streams[0], streams[1], app.create_initialization_options()
+      )
+  
+  anyio.run(arun)
