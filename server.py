@@ -186,6 +186,9 @@ async def search_parts(name: str, args: dict) -> list[types.TextContent | types.
   # WHERE句が存在する場合のみWHEREを追加
   if where_clauses:
     query += ' WHERE ' + ' AND '.join(where_clauses)
+  
+  limit = 50 if not where_clauses else 100
+  query += f' LIMIT {limit}'
 
   lines = []
   result = conn.execute(query, params)
@@ -224,7 +227,10 @@ async def search_parts(name: str, args: dict) -> list[types.TextContent | types.
 
     lines.append(f'|{r[0]}|{r[1]}|{r[2]}|{r[3]}|{r[4]}|{r[5]}|{r[6]}|{r[7]}|{r[8]}|{price_data}|{char_data}|')
 
-  return [types.TextContent(type="text", text="|部品番号|カテゴリID|メーカーID|メーカー品番|Basic Partsか|Preferred Partsか|説明|パッケージ|在庫数|価格|特性|\n|--|--|--|--|--|--|--|--|--|--|--|\n" + "\n".join(lines))]
+  header = "|部品番号|カテゴリID|メーカーID|メーカー品番|Basic Partsか|Preferred Partsか|説明|パッケージ|在庫数|価格|特性|\n|--|--|--|--|--|--|--|--|--|--|--|\n"
+  footer = f"\n\n注意: 検索結果は{limit}件に制限されています。より具体的な検索条件を指定することで、より多くの結果を確認できます。" if len(lines) == limit else ""
+  
+  return [types.TextContent(type="text", text=header + "\n".join(lines) + footer)]
 
 @app.list_resources()
 async def handle_list_resources() -> list[types.ResourceTemplate]:
