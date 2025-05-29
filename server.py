@@ -27,6 +27,20 @@ if not JLCPCB_DB_PATH:
   print('Please set JLCPCB_DB_PATH environment value!', file=sys.stderr)
   sys.exit(1)
 
+class SearchQuery(BaseModel):
+  category_id: int | None = Field(ge=1, default=None, description='有効なカテゴリID、list_categoriesツールで取得する')
+  manufacturer_id: int | None = Field(ge=1, default=None, description='有効なメーカーID、search_manufacturerやlist_manufacturersツールで取得する')
+  manufacturer_pn: str = Field(default=None, description='メーカー型番、SQLiteのLIKE演算子におけるパターンで指定')
+  description: str = Field(default=None, description='型番以外の説明文、SQLiteのLIKE演算子におけるパターンで指定、OR検索や表記ゆれ（-の有無等）は個別検索の必要あり')
+  package: str = Field(default=None)
+  is_basic_parts: bool | None = Field(default=None)
+  is_preferred_parts: bool | None = Field(default=None)
+
+  model_config = ConfigDict(
+    title='検索クエリ',
+    description='検索クエリを表現するモデル、各フィールドのAND検索'
+  )
+
 app = Server('jlcpcb-parts')
 conn = sqlite3.connect(JLCPCB_DB_PATH)
 
@@ -137,26 +151,12 @@ async def get_part_image(name: str, args: dict) -> list[types.TextContent | type
     print(e, file=sys.stderr)
     return [types.TextContent(type="text", text=f"エラーが発生しました: {str(e)}")]
 
-class SearchQuery(BaseModel):
-  category_id: int | None = Field(ge=1, default=None, description='有効なカテゴリID、list_categoriesツールで取得する')
-  manufacturer_id: int | None = Field(ge=1, default=None, description='有効なメーカーID、search_manufacturerやlist_manufacturersツールで取得する')
-  manufacturer_pn: str = Field(default=None, description='メーカー型番、SQLiteのLIKE演算子におけるパターンで指定')
-  description: str = Field(default=None, description='型番以外の説明文、SQLiteのLIKE演算子におけるパターンで指定、OR検索や表記ゆれ（-の有無等）は個別検索の必要あり')
-  package: str = Field(default=None)
-  is_basic_parts: bool | None = Field(default=None)
-  is_preferred_parts: bool | None = Field(default=None)
-
-  model_config = ConfigDict(
-    title='検索クエリ',
-    description='検索クエリを表現するモデル、各フィールドのAND検索'
-  )
-
 @app.call_tool()
 async def search_parts(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品を検索する"""
   search_query = SearchQuery(**args)
   
-  query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components WHERE '
+  query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components'
   where_clauses = []
   params = []
 
@@ -183,7 +183,9 @@ async def search_parts(name: str, args: dict) -> list[types.TextContent | types.
   if search_query.is_preferred_parts is not None:
     where_clauses.append('preferred=' + ('1' if search_query.is_preferred_parts is True else '0'))
 
-  query += ' AND '.join(where_clauses)
+  # WHERE句が存在する場合のみWHEREを追加
+  if where_clauses:
+    query += ' WHERE ' + ' AND '.join(where_clauses)
 
   lines = []
   result = conn.execute(query, params)
