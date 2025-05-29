@@ -138,7 +138,7 @@ async def get_part_image(name: str, args: dict) -> list[types.TextContent | type
     return [types.TextContent(type="text", text=f"エラーが発生しました: {str(e)}")]
 
 class SearchQuery(BaseModel):
-  category_id: int = Field(ge=1, description='有効なカテゴリID、list_categoriesツールで取得する')
+  category_id: int | None = Field(ge=1, default=None, description='有効なカテゴリID、list_categoriesツールで取得する')
   manufacturer_id: int | None = Field(ge=1, default=None, description='有効なメーカーID、search_manufacturerやlist_manufacturersツールで取得する')
   manufacturer_pn: str = Field(default=None, description='メーカー型番、SQLiteのLIKE演算子におけるパターンで指定')
   description: str = Field(default=None, description='型番以外の説明文、SQLiteのLIKE演算子におけるパターンで指定、OR検索や表記ゆれ（-の有無等）は個別検索の必要あり')
@@ -155,6 +155,11 @@ class SearchQuery(BaseModel):
 async def search_parts(name: str, args: dict) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
   """JLCPCBの部品を検索する"""
   search_query = SearchQuery(**args)
+  
+  # category_idが指定されていない場合はエラーを返す
+  if search_query.category_id is None:
+    return [types.TextContent(type="text", text="エラー: category_idは必須です。list_categoriesツールでカテゴリIDを取得してください。")]
+  
   query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components WHERE '
   where_clauses = []
   params = []
