@@ -156,16 +156,14 @@ async def search_parts(name: str, args: dict) -> list[types.TextContent | types.
   """JLCPCBの部品を検索する"""
   search_query = SearchQuery(**args)
   
-  # category_idが指定されていない場合はエラーを返す
-  if search_query.category_id is None:
-    return [types.TextContent(type="text", text="エラー: category_idは必須です。list_categoriesツールでカテゴリIDを取得してください。")]
-  
   query = 'SELECT lcsc,category_id,manufacturer_id,mfr,basic,preferred,description,package,stock,price,extra FROM components WHERE '
   where_clauses = []
   params = []
 
-  where_clauses.append('category_id=?')
-  params.append(search_query.category_id)
+  # category_idが指定されている場合のみ条件に追加
+  if search_query.category_id is not None:
+    where_clauses.append('category_id=?')
+    params.append(search_query.category_id)
 
   if search_query.manufacturer_id is not None:
     where_clauses.append('manufacturer_id=?')
