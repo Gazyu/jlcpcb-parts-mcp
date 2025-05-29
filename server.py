@@ -34,14 +34,14 @@ conn = sqlite3.connect(JLCPCB_DB_PATH)
 async def handle_list_tools() -> list[types.Tool]:
     """利用可能なツール一覧を返します"""
     return [
-        types.Tool(name="list_categories", description="JLCPCBの部品のカテゴリ一覧を取得する"),
-        types.Tool(name="list_manufacturers", description="JLCPCBの部品のメーカー一覧を取得する"),
-        types.Tool(name="get_category", description="カテゴリIDから、カテゴリ名とサブカテゴリ名を取得する"),
-        types.Tool(name="get_manufacturer", description="メーカーIDから、メーカー名を取得する"),
-        types.Tool(name="search_manufacturer", description="メーカー名から部分一致で検索を行い、メーカーIDを取得する"),
-        types.Tool(name="get_datasheet_url", description="JLCPCBの部品番号から、データシートのURLを取得する、数字の部分のみだけで良い"),
-        types.Tool(name="get_part_image", description="JLCPCBの部品番号から、部品の写真を取得する、数字の部分のみだけで良い"),
-        types.Tool(name="search_parts", description="JLCPCBの部品を検索する"),
+        types.Tool(name="list_categories", description="JLCPCBの部品のカテゴリ一覧を取得する", inputSchema={'type': 'object', 'properties': {}}),
+        types.Tool(name="list_manufacturers", description="JLCPCBの部品のメーカー一覧を取得する", inputSchema={'type': 'object', 'properties': {}}),
+        types.Tool(name="get_category", description="カテゴリIDから、カテゴリ名とサブカテゴリ名を取得する", inputSchema={'type': 'object', 'properties': {'category_id': {'type': 'integer', 'description': 'カテゴリID'}}, 'required': ['category_id']}),
+        types.Tool(name="get_manufacturer", description="メーカーIDから、メーカー名を取得する", inputSchema={'type': 'object', 'properties': {'manufacturer_id': {'type': 'integer', 'description': 'メーカーID'}}, 'required': ['manufacturer_id']}),
+        types.Tool(name="search_manufacturer", description="メーカー名から部分一致で検索を行い、メーカーIDを取得する", inputSchema={'type': 'object', 'properties': {'name': {'type': 'string', 'description': 'メーカー名'}}, 'required': ['name']}),
+        types.Tool(name="get_datasheet_url", description="JLCPCBの部品番号から、データシートのURLを取得する、数字の部分のみだけで良い", inputSchema={'type': 'object', 'properties': {'part_id': {'type': 'integer', 'description': '部品番号'}}, 'required': ['part_id']}),
+        types.Tool(name="get_part_image", description="JLCPCBの部品番号から、部品の写真を取得する、数字の部分のみだけで良い", inputSchema={'type': 'object', 'properties': {'part_id': {'type': 'integer', 'description': '部品番号'}}, 'required': ['part_id']}),
+        types.Tool(name="search_parts", description="JLCPCBの部品を検索する", inputSchema=SearchQuery.model_json_schema()),
     ]
 
 @app.call_tool()
@@ -220,6 +220,16 @@ async def search_parts(name: str, args: dict) -> list[types.TextContent | types.
     lines.append(f'|{r[0]}|{r[1]}|{r[2]}|{r[3]}|{r[4]}|{r[5]}|{r[6]}|{r[7]}|{r[8]}|{price_data}|{char_data}|')
 
   return [types.TextContent(type="text", text="|部品番号|カテゴリID|メーカーID|メーカー品番|Basic Partsか|Preferred Partsか|説明|パッケージ|在庫数|価格|特性|\n|--|--|--|--|--|--|--|--|--|--|--|\n" + "\n".join(lines))]
+
+@app.list_resources()
+async def handle_list_resources() -> list[types.ResourceTemplate]:
+    """利用可能なリソーステンプレート一覧を返します"""
+    return []
+
+@app.list_prompts()
+async def handle_list_prompts() -> list[types.Prompt]:
+    """利用可能なプロンプト一覧を返します"""
+    return []
 
 if __name__ == '__main__':
   async def arun():
